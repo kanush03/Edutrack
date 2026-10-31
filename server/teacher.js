@@ -125,4 +125,17 @@ router.get('/tests/:testId/results', (req, res) => {
     .all(test.id)
   res.json({ test: test.title, max_marks: test.max_marks, results: rows })
 })
+router.post('/classes/:classId/announcements', (req, res) => {
+  const cls = ownedClass(req.params.classId, req.user.id)
+  if (!cls) return res.status(404).json({ error: 'Class not found' })
+  const message = (req.body.message || '').trim()
+  if (!message) return res.status(400).json({ error: 'Message is required' })
+  if (message.length > 500) {
+    return res.status(400).json({ error: 'Message must be 500 characters or less' })
+  }
+  const result = db
+    .prepare('INSERT INTO announcements (class_id, message) VALUES (?, ?)')
+    .run(cls.id, message)
+  res.status(201).json({ id: Number(result.lastInsertRowid), class_id: cls.id, message })
+})
 export default router

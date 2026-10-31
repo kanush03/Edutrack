@@ -73,5 +73,17 @@ router.get('/stats', (req, res) => {
     .get(req.user.id)
   res.json(row)
 })
-
+router.get('/announcements', (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.message, a.created_at, c.name AS class_name
+       FROM announcements a
+       JOIN classes c ON c.id = a.class_id
+       JOIN enrollments e ON e.class_id = c.id
+       WHERE e.student_id = ?
+       ORDER BY a.created_at DESC, a.id DESC`
+    )
+    .all(req.user.id)
+  res.json(rows)
+})
 export default router
