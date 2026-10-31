@@ -53,9 +53,10 @@ export default function StudentDashboard() {
       api('/student/stats'),
       api('/student/announcements'),
       api('/student/top5'),
+      api('/student/attendance'),
     ])
-      .then(([classes, schedule, tests, results, stats, announcements, top5]) =>
-        setData({ classes, schedule, tests, results, stats, announcements, top5 })
+      .then(([classes, schedule, tests, results, stats, announcements, top5, attendance]) =>
+        setData({ classes, schedule, tests, results, stats, announcements, top5, attendance })
       )
       .catch((err) => setError(err.message))
   }, [])
@@ -159,6 +160,19 @@ export default function StudentDashboard() {
             </div>
 
             <div className="space-y-6">
+              <Card title="Attendance">
+                {data.attendance.length === 0 && <p className="text-sm text-slate-500">Not in any class yet.</p>}
+                <ul className="space-y-2 text-sm">
+                  {data.attendance.map((a) => (
+                    <li key={a.class_name} className="flex justify-between">
+                      <span>{a.class_name}</span>
+                      <span className="font-medium">
+                        {a.percentage == null ? 'Not marked yet' : `${a.percentage}% (${a.attended}/${a.total})`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
               <Card title="Top 5 this week">
                 <TopList rows={data.top5.weekly} />
               </Card>

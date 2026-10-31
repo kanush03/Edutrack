@@ -28,6 +28,9 @@ export default function TeacherDashboard() {
   const [announcement, setAnnouncement] = useState('')
   const [resultTestId, setResultTestId] = useState('')
   const [marks, setMarks] = useState({})
+  const [attDate, setAttDate] = useState(() => new Date().toLocaleDateString('en-CA'))
+  const [att, setAtt] = useState({})
+  const [attMarked, setAttMarked] = useState(false)
 
   useEffect(() => {
     api('/teacher/classes')
@@ -47,6 +50,18 @@ export default function TeacherDashboard() {
       .then(setOverview)
       .catch((err) => setNotice({ type: 'error', text: err.message }))
   }, [selectedId])
+
+  useEffect(() => {
+    if (!selectedId || !attDate) return
+    api(`/teacher/classes/${selectedId}/attendance?date=${attDate}`)
+      .then((rows) => {
+        const map = {}
+        rows.forEach((r) => { map[r.id] = r.present === null ? true : r.present === 1 })
+        setAtt(map)
+        setAttMarked(rows.some((r) => r.present !== null))
+      })
+      .catch((err) => setNotice({ type: 'error', text: err.message }))
+  }, [selectedId, attDate, overview])
 
   const refresh = () => api(`/teacher/classes/${selectedId}/overview`).then(setOverview)
 
@@ -125,6 +140,18 @@ export default function TeacherDashboard() {
     action(async () => {
       await api(`/teacher/tests/${resultTestId}/results`, { method: 'POST', body: { results } })
     }, 'Results saved')
+  }
+
+  function saveAttendance(e) {
+    e.preventDefault()
+    const records = overview.students.map((s) => ({ student_id: s.id, present: att[s.id] !== false }))
+    action(async () => {
+      await api(`/teacher/classes/${selectedId}/attendance`, {
+        method: 'POST',
+        body: { date: attDate, records },
+      })
+      setAttMarked(true)
+    }, 'Attendance saved', false)
   }
 
   function logout() {
@@ -246,6 +273,32 @@ export default function TeacherDashboard() {
                     </ul>
                   </Card>
                 </div>
+
+                <Card title="Attendance">
+                  <div className="mb-3 flex items-center gap-3">
+                    <input className={`${input} max-w-xs`} type="date" value={attDate} onChange={(e) => setAttDate(e.target.value)} />
+                    <span className="text-sm text-slate-500">
+                      {attMarked ? 'Already marked for this date (you can edit)' : 'Not marked yet for this date'}
+                    </span>
+                  </div>
+                  {overview.students.length === 0 && <p className="text-sm text-slate-500">Add students first.</p>}
+                  {overview.students.length > 0 && (
+                    <form onSubmit={saveAttendance} className="space-y-2">
+                      {overview.students.map((s) => (
+                        <label key={s.id} className="flex items-center gap-3 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={att[s.id] !== false}
+                            onChange={(e) => setAtt({ ...att, [s.id]: e.target.checked })}
+                          />
+                          <span>{s.name}</span>
+                          <span className="text-slate-400">{att[s.id] !== false ? 'Present' : 'Absent'}</span>
+                        </label>
+                      ))}
+                      <button className={button}>Save attendance</button>
+                    </form>
+                  )}
+                </Card>
 
                 <Card title="Enter test results">
                   <select className={input} value={resultTestId} onChange={(e) => pickTest(e.target.value)}>
