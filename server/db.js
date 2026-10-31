@@ -57,5 +57,14 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 `)
-
+db.exec(`
+  CREATE TABLE IF NOT EXISTS attendance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    class_id INTEGER NOT NULL REFERENCES classes(id),
+    student_id INTEGER NOT NULL REFERENCES users(id),
+    date TEXT NOT NULL,
+    present INTEGER NOT NULL CHECK (present IN (0, 1)),
+    UNIQUE (class_id, student_id, date)
+  );
+`)
 export default db

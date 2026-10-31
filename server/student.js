@@ -86,4 +86,58 @@ router.get('/announcements', (req, res) => {
     .all(req.user.id)
   res.json(rows)
 })
+function localDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function currentWeek() {
+  const now = new Date()
+  const start = new Date(now)
+  start.setDate(now.getDate() - ((now.getDay() + 6) % 7)) // Monday
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6) // Sunday
+  return { start: localDate(start), end: localDate(end) }
+}
+
+router.get('/top5', (req, res) => {
+  const week = currentWeek()
+  const base = `
+    SELECT u.id, u.name, ROUND(AVG(r.marks * 100.0 / t.max_marks), 1) AS average
+    FROM results r
+    JOIN tests t ON t.id = r.test_id
+    JOIN users u ON u.id = r.student_id
+    WHERE t.class_id IN (SELECT class_id FROM enrollments WHERE student_id = ?)`
+  const tail = ` GROUP BY u.id ORDER BY average DESC, u.name LIMIT 5`
+
+  const mark = (rows) =>
+    rows.map((r) => ({ name: r.name, average: r.average, is_you: r.id === req.user.id }))
+
+  const overall = db.prepare(base + tail).all(req.user.id)
+  const weekly = db
+    .prepare(base + ' AND t.test_date BETWEEN ? AND ?' + tail)
+    .all(req.user.id, week.start, week.end)
+
+  res.json({ week, weekly: mark(weekly), overall: mark(overall) })
+})
+
+router.get('/attendance', (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT c.name AS class_name,
+              COUNT(a.id) AS total,
+              COALESCE(SUM(a.present), 0) AS attended
+       FROM enrollments e
+       JOIN classes c ON c.id = e.class_id
+       LEFT JOIN attendance a ON a.class_id = c.id AND a.student_id = e.student_id
+       WHERE e.student_id = ?
+       GROUP BY c.id`
+    )
+    .all(req.user.id)
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      percentage: r.total ? Math.round((r.attended * 1000) / r.total) / 10 : null,
+    }))
+  )
+})
 export default router

@@ -138,4 +138,67 @@ router.post('/classes/:classId/announcements', (req, res) => {
     .run(cls.id, message)
   res.status(201).json({ id: Number(result.lastInsertRowid), class_id: cls.id, message })
 })
+router.get('/classes/:classId/overview', (req, res) => {
+  const cls = ownedClass(req.params.classId, req.user.id)
+  if (!cls) return res.status(404).json({ error: 'Class not found' })
+  const students = db
+    .prepare(
+      `SELECT u.id, u.name, u.email FROM enrollments e
+       JOIN users u ON u.id = e.student_id
+       WHERE e.class_id = ? ORDER BY u.name`
+    )
+    .all(cls.id)
+  const schedule = db
+    .prepare('SELECT id, day_of_week, start_time, end_time FROM schedule WHERE class_id = ?')
+    .all(cls.id)
+  const tests = db
+    .prepare('SELECT id, title, test_date, max_marks FROM tests WHERE class_id = ? ORDER BY test_date')
+    .all(cls.id)
+  const announcements = db
+    .prepare('SELECT id, message, created_at FROM announcements WHERE class_id = ? ORDER BY created_at DESC, id DESC')
+    .all(cls.id)
+  res.json({ class: cls, students, schedule, tests, announcements })
+})
+const isDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '')
+
+router.get('/classes/:classId/attendance', (req, res) => {
+  const cls = ownedClass(req.params.classId, req.user.id)
+  if (!cls) return res.status(404).json({ error: 'Class not found' })
+  const date = req.query.date
+  if (!isDate(date)) return res.status(400).json({ error: 'A date like 2026-11-05 is required' })
+  const rows = db
+    .prepare(
+      `SELECT u.id, u.name, u.email, a.present
+       FROM enrollments e
+       JOIN users u ON u.id = e.student_id
+       LEFT JOIN attendance a
+         ON a.student_id = u.id AND a.class_id = e.class_id AND a.date = ?
+       WHERE e.class_id = ?
+       ORDER BY u.name`
+    )
+    .all(date, cls.id)
+  res.json(rows)
+})
+
+router.post('/classes/:classId/attendance', (req, res) => {
+  const cls = ownedClass(req.params.classId, req.user.id)
+  if (!cls) return res.status(404).json({ error: 'Class not found' })
+  const { date, records } = req.body
+  if (!isDate(date) || !Array.isArray(records)) {
+    return res.status(400).json({ error: 'date and records are required' })
+  }
+  const isEnrolled = db.prepare('SELECT 1 FROM enrollments WHERE class_id = ? AND student_id = ?')
+  const save = db.prepare(
+    `INSERT INTO attendance (class_id, student_id, date, present) VALUES (?, ?, ?, ?)
+     ON CONFLICT(class_id, student_id, date) DO UPDATE SET present = excluded.present`
+  )
+  let saved = 0
+  for (const r of records) {
+    const studentId = Number(r.student_id)
+    if (!isEnrolled.get(cls.id, studentId)) continue
+    save.run(cls.id, studentId, date, r.present ? 1 : 0)
+    saved++
+  }
+  res.status(201).json({ date, saved })
+})
 export default router
