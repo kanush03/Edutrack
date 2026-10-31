@@ -21,6 +21,23 @@ function Stat({ label, value }) {
   )
 }
 
+function TopList({ rows }) {
+  if (rows.length === 0) return <p className="text-sm text-slate-500">No results yet.</p>
+  return (
+    <ol className="space-y-2 text-sm">
+      {rows.map((r, i) => (
+        <li
+          key={r.name + i}
+          className={`flex justify-between rounded-lg p-2 ${r.is_you ? 'bg-slate-800 text-white' : 'bg-slate-50'}`}
+        >
+          <span>{i + 1}. {r.name}{r.is_you ? ' (you)' : ''}</span>
+          <span className="font-medium">{r.average}%</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 export default function StudentDashboard() {
   const navigate = useNavigate()
   const { user } = getSession()
@@ -35,9 +52,10 @@ export default function StudentDashboard() {
       api('/student/results'),
       api('/student/stats'),
       api('/student/announcements'),
+      api('/student/top5'),
     ])
-      .then(([classes, schedule, tests, results, stats, announcements]) =>
-        setData({ classes, schedule, tests, results, stats, announcements })
+      .then(([classes, schedule, tests, results, stats, announcements, top5]) =>
+        setData({ classes, schedule, tests, results, stats, announcements, top5 })
       )
       .catch((err) => setError(err.message))
   }, [])
@@ -140,17 +158,25 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            <Card title="Notifications">
-              {data.announcements.length === 0 && <p className="text-sm text-slate-500">No messages from your teachers.</p>}
-              <ul className="space-y-3">
-                {data.announcements.map((a) => (
-                  <li key={a.id} className="rounded-lg bg-slate-50 p-3 text-sm">
-                    <p>{a.message}</p>
-                    <p className="mt-1 text-xs text-slate-400">{a.class_name} · {a.created_at}</p>
-                  </li>
-                ))}
-              </ul>
-            </Card>
+            <div className="space-y-6">
+              <Card title="Top 5 this week">
+                <TopList rows={data.top5.weekly} />
+              </Card>
+              <Card title="Top 5 overall">
+                <TopList rows={data.top5.overall} />
+              </Card>
+              <Card title="Notifications">
+                {data.announcements.length === 0 && <p className="text-sm text-slate-500">No messages from your teachers.</p>}
+                <ul className="space-y-3">
+                  {data.announcements.map((a) => (
+                    <li key={a.id} className="rounded-lg bg-slate-50 p-3 text-sm">
+                      <p>{a.message}</p>
+                      <p className="mt-1 text-xs text-slate-400">{a.class_name} · {a.created_at}</p>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </div>
           </div>
         )}
       </div>
