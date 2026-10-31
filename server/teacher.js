@@ -65,5 +65,64 @@ router.post('/classes/:classId/tests', (req, res) => {
     .run(cls.id, title, test_date, Number(max_marks))
   res.status(201).json({ id: Number(result.lastInsertRowid), title, test_date, max_marks: Number(max_marks) })
 })
+function ownedTest(testId, teacherId) {
+  return db
+    .prepare(
+      `SELECT t.* FROM tests t
+       JOIN classes c ON c.id = t.class_id
+       WHERE t.id = ? AND c.teacher_id = ?`
+    )
+    .get(Number(testId), teacherId)
+}
 
+router.post('/tests/:testId/results', (req, res) => {
+  const test = ownedTest(req.params.testId, req.user.id)
+  if (!test) return res.status(404).json({ error: 'Test not found' })
+
+  const { results } = req.body
+  if (!Array.isArray(results) || results.length === 0) {
+    return res.status(400).json({ error: 'results must be a non-empty array' })
+  }
+
+  const findStudent = db.prepare(
+    `SELECT u.id FROM users u
+     JOIN enrollments e ON e.student_id = u.id
+     WHERE u.email = ? AND e.class_id = ?`
+  )
+  const save = db.prepare(
+    `INSERT INTO results (test_id, student_id, marks) VALUES (?, ?, ?)
+     ON CONFLICT(test_id, student_id) DO UPDATE SET marks = excluded.marks`
+  )
+
+  const saved = []
+  const errors = []
+  for (const r of results) {
+    const marks = Number(r.marks)
+    const student = findStudent.get(r.email, test.class_id)
+    if (!student) {
+      errors.push({ email: r.email, error: 'Student is not in this class' })
+      continue
+    }
+    if (!(marks >= 0 && marks <= test.max_marks)) {
+      errors.push({ email: r.email, error: `Marks must be between 0 and ${test.max_marks}` })
+      continue
+    }
+    save.run(test.id, student.id, marks)
+    saved.push({ email: r.email, marks })
+  }
+  res.status(errors.length && !saved.length ? 400 : 201).json({ saved, errors })
+})
+
+router.get('/tests/:testId/results', (req, res) => {
+  const test = ownedTest(req.params.testId, req.user.id)
+  if (!test) return res.status(404).json({ error: 'Test not found' })
+  const rows = db
+    .prepare(
+      `SELECT u.name, u.email, r.marks FROM results r
+       JOIN users u ON u.id = r.student_id
+       WHERE r.test_id = ?`
+    )
+    .all(test.id)
+  res.json({ test: test.title, max_marks: test.max_marks, results: rows })
+})
 export default router
