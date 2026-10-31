@@ -25,6 +25,9 @@ export async function api(path, { method = 'GET', body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || 'Something went wrong')
+    if (!res.ok) {
+    const first = data.errors && data.errors[0]
+    throw new Error(data.error || (first ? `${first.email}: ${first.error}` : 'Something went wrong'))
+  }
   return data
 }
